@@ -4,5 +4,16 @@
     <string name="app_name">NorCalTrainDatabaseBuilder</string>
     <string name="button_build_database">Builder database now</string>
     <string name="action_settings">Settings</string>
+     <string name="routes_csv">gtfs/routes.txt</string>
+    <string name="stops_csv">gtfs/stops.txt</string>
+    <string name="stop_times_csv">gtfs/stop_times.txt</string>
+    <string name="trips_csv">gtfs/trips.txt</string>
+    <string name="calendar_dates_csv">gtfs/calendar_dates.txt</string>
+    <string name="calendar_csv">gtfs/calendar.txt</string>
+    <string name="fare_attributes_csv">gtfs/fare_attributes.txt</string>
+    <string name="fare_rules_csv">gtfs/fare_rules.txt</string>
+    <string name="shapes_csv">gtfs/shapes.txt</string>
+    <string name="agency_csv">gtfs/agency.txt</string>
+    <string name="caltrain_db">database/Caltrain_GTFS</string>
 
 </resources>

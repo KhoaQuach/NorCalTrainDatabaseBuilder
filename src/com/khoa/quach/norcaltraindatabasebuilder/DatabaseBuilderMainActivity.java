@@ -3,12 +3,16 @@ package com.khoa.quach.norcaltraindatabasebuilder;
 import android.app.Activity;
 import android.app.ActionBar;
 import android.app.Fragment;
+import android.net.wifi.WifiConfiguration.Status;
 import android.os.Bundle;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
+import android.widget.ProgressBar;
+import android.widget.TextView;
 import android.os.Build;
 
 public class DatabaseBuilderMainActivity extends Activity {
@@ -16,12 +20,22 @@ public class DatabaseBuilderMainActivity extends Activity {
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
-		setContentView(R.layout.activity_database_builder_main);
-
-		if (savedInstanceState == null) {
-			getFragmentManager().beginTransaction()
-					.add(R.id.container, new PlaceholderFragment()).commit();
-		}
+		setContentView(R.layout.database_builder_layout);
+		
+		final ProgressBar build_progress = (ProgressBar)findViewById(R.id.progress_bar);
+		build_progress.setVisibility(View.INVISIBLE);
+		
+		final Button start_build = (Button) findViewById(R.id.button_start_build);
+		start_build.setOnClickListener(new View.OnClickListener() {
+		    @Override
+		    public void onClick(View v) {
+		    	start_build.setEnabled(false);
+		    	build_progress.setVisibility(View.VISIBLE);
+		        buildDatabaseNow(v);
+		        start_build.setEnabled(true);
+		        build_progress.setVisibility(View.INVISIBLE);
+		    }
+		});
 	}
 
 	@Override
@@ -43,22 +57,25 @@ public class DatabaseBuilderMainActivity extends Activity {
 		}
 		return super.onOptionsItemSelected(item);
 	}
-
+	
 	/**
-	 * A placeholder fragment containing a simple view.
+	 * Do building the database here
 	 */
-	public static class PlaceholderFragment extends Fragment {
-
-		public PlaceholderFragment() {
+	public void buildDatabaseNow(View v) {
+		
+		final TextView status_text = (TextView)findViewById(R.id.text_view_status);
+		
+		for (int i = 0; i < 100; i++) {
+			try {
+				status_text.setText("count " + i);
+				Thread.sleep(1000);
+				
+			} catch (InterruptedException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
-
-		@Override
-		public View onCreateView(LayoutInflater inflater, ViewGroup container,
-				Bundle savedInstanceState) {
-			View rootView = inflater.inflate(
-					R.layout.fragment_database_builder_main, container, false);
-			return rootView;
-		}
+		
 	}
 
 }
