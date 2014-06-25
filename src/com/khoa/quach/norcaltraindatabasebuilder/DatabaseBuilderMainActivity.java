@@ -1,19 +1,15 @@
 package com.khoa.quach.norcaltraindatabasebuilder;
 
 import android.app.Activity;
-import android.app.ActionBar;
-import android.app.Fragment;
-import android.net.wifi.WifiConfiguration.Status;
 import android.os.Bundle;
-import android.view.LayoutInflater;
+import android.os.Handler;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ProgressBar;
+import android.widget.ScrollView;
 import android.widget.TextView;
-import android.os.Build;
 
 public class DatabaseBuilderMainActivity extends Activity {
 
@@ -29,11 +25,8 @@ public class DatabaseBuilderMainActivity extends Activity {
 		start_build.setOnClickListener(new View.OnClickListener() {
 		    @Override
 		    public void onClick(View v) {
-		    	start_build.setEnabled(false);
-		    	build_progress.setVisibility(View.VISIBLE);
 		        buildDatabaseNow(v);
-		        start_build.setEnabled(true);
-		        build_progress.setVisibility(View.INVISIBLE);
+		        
 		    }
 		});
 	}
@@ -63,18 +56,55 @@ public class DatabaseBuilderMainActivity extends Activity {
 	 */
 	public void buildDatabaseNow(View v) {
 		
-		final TextView status_text = (TextView)findViewById(R.id.text_view_status);
+		final CalTrainDatabaseHelper m_caltrainDb = new CalTrainDatabaseHelper(v.getContext());
 		
-		for (int i = 0; i < 100; i++) {
-			try {
-				status_text.setText("count " + i);
-				Thread.sleep(1000);
-				
-			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
-		}
+		final TextView status_text = (TextView)findViewById(R.id.text_view_status);
+		final ProgressBar build_progress = (ProgressBar)findViewById(R.id.progress_bar);
+		final Button start_build = (Button) findViewById(R.id.button_start_build);
+		final ScrollView scroll_view = (ScrollView) findViewById(R.id.scroll_view);
+		scroll_view.fullScroll(View.FOCUS_DOWN);
+		build_progress.setVisibility(View.VISIBLE);
+		start_build.setEnabled(false);
+		
+		final Handler handler = new Handler();
+	    Runnable runnable = new Runnable() {
+	       
+	        public void run() {
+	    
+	        	// Do work here
+	    		m_caltrainDb.SetupDatabaseTables();
+	    		
+	    		// Testing to update text view status
+	            for (int i = 0; i < 5; i++) {  
+	                try {
+	                    Thread.sleep(1000);
+	                }    
+	                catch (InterruptedException e) {
+	                    e.printStackTrace();
+	                }
+	                handler.post(new Runnable(){
+	                    public void run() {
+	                       status_text.append("Finishing count down..." + System.currentTimeMillis() + "\n");
+	                    }
+	                });
+	            }
+	            
+	            handler.post(new Runnable(){
+                    public void run() {
+                    	status_text.append("Done\n");
+                       	build_progress.setVisibility(View.INVISIBLE);
+       		        	start_build.setEnabled(true);
+                    }
+                });
+	            
+		        
+	        }
+	    };
+	    new Thread(runnable).start();
+	    
+	    
+	    
+		
 		
 	}
 

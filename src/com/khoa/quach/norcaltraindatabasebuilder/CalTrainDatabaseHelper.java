@@ -2,14 +2,10 @@ package com.khoa.quach.norcaltraindatabasebuilder;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.GregorianCalendar;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -215,8 +211,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     // Creating Tables
     @Override
     public void onCreate(SQLiteDatabase db) {
-	    	// Create tables
-    		createTables(db);
+	    // Create tables
+    	createTables(db);
     }
  
     // Upgrading database
@@ -227,17 +223,217 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
         
     }
     
-   
+    /*
+     * Aggregate individual trip to caltrain_schedules table
+     */
+    private void AggregateCaltrainSchedule(String depart_station, String arrival_station, String direction, ScheduledEnum selectedSchedule) throws Exception {
+    	
+    	String route_number = "", route_name = "";
+    	
+    	// Data is temporarily held here
+		Map<String, RouteDetail> routeTempDetail = new LinkedHashMap<String, RouteDetail>();
+		RouteDetail newRouteDetail;
+    	
+    	String selectQuery = BuildGetCaltrainScheduleQueryStatement(depart_station, arrival_station, direction, selectedSchedule);
+    	
+		try {
+			SQLiteDatabase db = this.getReadableDatabase();
+			Cursor cursor = db.rawQuery(selectQuery, null);
+			
+			if ( cursor.moveToFirst() ) {
+				
+			    do { 
+			    	
+			    	//
+			    	// Marshal the data
+			    	//
+			    	
+			    	if (depart_station.compareTo(cursor.getString(0).trim()) == 0) {
+			    		
+			    		newRouteDetail = new RouteDetail();
+			    		
+			    		//
+			    		// The row data belong to source station, save them into a hashable list
+			    		//
+			    		newRouteDetail.setDepartStationName(cursor.getString(0).trim());
+			    		route_number = cursor.getString(1).trim();
+			    		newRouteDetail.setRouteNumber(route_number);
+			    		newRouteDetail.setRouteDepart(cursor.getString(2).trim());
+			    		newRouteDetail.setRouteName(cursor.getString(3).trim());
+			    		newRouteDetail.setRouteStartDate(cursor.getString(4).trim());
+			    		newRouteDetail.setRouteEndDate(cursor.getString(5).trim());
+			    		newRouteDetail.setRouteServiceId(cursor.getString(6).trim());
+			    		newRouteDetail.setRouteArrive("Transfer(s)");
+			    		newRouteDetail.setDirectRoute(false);
+			    		newRouteDetail.setNeedTransfer(false);
+			    		
+			    		// Save it in a temporary hashtable object
+			    		routeTempDetail.put(route_number, newRouteDetail);
+			    		
+			    	}
+			    	else if (arrival_station.compareTo(cursor.getString(0).trim()) == 0) {
+			    		
+			    		//
+			    		// The row data belongs to destination station, get the existing route detail
+			    		// based on the route number from the hashable list
+			    		//
+			    		route_number = cursor.getString(1).trim();
+			    		route_name = cursor.getString(3).trim();
+			    		newRouteDetail = routeTempDetail.get(route_number);
+			    		
+			    		if ( (newRouteDetail != null) && (route_name.equals(newRouteDetail.getRouteName()))) {
+			    			newRouteDetail.setArrivalStationName(cursor.getString(0).trim());
+			    			newRouteDetail.setRouteArrive(cursor.getString(2).trim());
+			    			newRouteDetail.setDirectRoute(true);
+			    			newRouteDetail.setNeedTransfer(false);
+			    		}
+			    		else {
+			    			if (newRouteDetail == null) {
+			    				
+			    				newRouteDetail = new RouteDetail();
+					    		
+					    		//
+					    		// The row data belong to destination station, save them into a hashable list
+					    		//
+					    		route_number = cursor.getString(1).trim();
+					    		newRouteDetail.setArrivalStationName(cursor.getString(0).trim());
+					    		newRouteDetail.setRouteNumber(route_number);
+					    		newRouteDetail.setRouteArrive(cursor.getString(2).trim());
+					    		newRouteDetail.setRouteName(cursor.getString(3).trim());
+					    		newRouteDetail.setRouteStartDate(cursor.getString(4).trim());
+					    		newRouteDetail.setRouteEndDate(cursor.getString(5).trim());
+					    		newRouteDetail.setRouteServiceId(cursor.getString(6).trim());
+					    		newRouteDetail.setRouteDepart("Transfer(s)");
+					    		newRouteDetail.setDirectRoute(false);
+					    		newRouteDetail.setNeedTransfer(true);
+			    				
+			    				// Save it in a temporary hashtable object
+					    		routeTempDetail.put(route_number, newRouteDetail);
+			    			}
+			    		}
+			    		
+			    	}
+			    	
+			    } while ( cursor.moveToNext() );
+			    
+			    int position = 0;
+			    int least_position = 0;
+			    
+			    // Now add items into the list in order
+			    for (Map.Entry<String, RouteDetail> entry : routeTempDetail.entrySet()) {
+			    	
+			        RouteDetail routeDetail = entry.getValue();
+			        if (routeDetail.getNeedTransfer()) {
+			        	
+			        	List<String> keyList = new ArrayList<String>(routeTempDetail.keySet());
+			        	
+			        	// Determine if it has any transfer routes within 30 minutes,
+			        	// if it does, build the transfer route list and add to detail list,
+			        	// otherwise, just ignore it
+			        	
+			        	RouteDetail test_entry = null;
+			        	for( int i = position; i >= least_position; i--) {
+			        		
+			        		String route_id = keyList.get(i);
+			        	    test_entry = routeTempDetail.get(route_id);
+			        	   
+			        	    if (!test_entry.getNeedTransfer()) {
+			        	    	
+			        	    	TransferDetail transfer = getTransferDetail(test_entry.getRouteDepart(), test_entry.getRouteNumber(), routeDetail.getRouteArrive(), routeDetail.getRouteNumber(), direction);
+			        	    	if ((transfer != null) && (60*1000*30 <= routeDetail.TimeDifference(transfer.getArrivalTime(), transfer.getDepartTime()))) {
+			        	    		break;
+			        	    	}
+			        	    	
+			        	    	// Only do transfer if less than 30 minutes
+			        	    	if (transfer != null) {
+			        	    		
+			        	    		routeDetail.setDepartStationName(test_entry.getDepartStationName());
+			        	    		routeDetail.setRouteNumber(test_entry.getRouteNumber());
+						    		routeDetail.setRouteDepart(test_entry.getRouteDepart());
+						    		
+			        	    		routeDetail.setRouteTransfer(transfer);
+			        	    		
+			        	    		InsertScheduleIntoTable(routeDetail);
+			        	    		
+			        	    		least_position = i;
+			        	    		
+			        	    		break;
+			        	    		
+			        	    	}
+			        	    	
+			        	    }
+			       
+			        	}
+			        }
+			        else {
+			        	if (routeDetail.getDirectRoute()) {
+			        		InsertScheduleIntoTable(routeDetail);
+			        	}
+			        }
+			    
+			        position++;
+			    }
+			}
+			
+		} catch(Exception e) {
+			throw e;
+		}
+    }
     
     /*
-     * Build appropriate query statement to more detail on the selected stations
+     * Aggregate data to Caltrain schedule table 
      */
-    private String BuildGetDetailQueryStatement(String source_station_name, String destination_station_name, String direction) {
+    private void AggregateCaltrainSchedules(ScheduledEnum scheduledDate) {
+    	
+    	String direction = "";
+    	
+    	try {
+			List<String> station_names = getAllStopNames();
+			
+			for (int i = 0; i < station_names.size(); i++) {
+				for (int j = 0; j < station_names.size(); j++) {
+					
+					if (j < i) direction = "SB";
+					else direction = "NB";
+					
+					AggregateCaltrainSchedule(station_names.get(i), station_names.get(j), direction, scheduledDate);
+				
+				}
+			}
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+    	
+    }
+     
+    /*
+     * Build appropriate query statement to get data from database per trip
+     */
+    private String BuildGetCaltrainScheduleQueryStatement(String depart_station, String arrival_station, String direction, ScheduledEnum selectedSchedule) {
     	
     	String queryStatement = "", contents = "";
     	
-    	contents = getFileContents("queries/getdetail.txt");
-	   	queryStatement = String.format(contents, direction, source_station_name, direction, destination_station_name);
+    	switch (selectedSchedule) {
+    	case WEEKDAY:
+    		
+    		contents = getFileContents("queries/get_weekday_routes.txt");
+	   		queryStatement = String.format(contents, direction, depart_station, arrival_station);
+    		break;
+    		
+    	case SATURDAY:
+    		
+    		contents = getFileContents("queries/get_saturday_routes.txt");
+	   		queryStatement = String.format(contents, direction, depart_station, arrival_station);
+    		break;
+    		
+    	case SUNDAY:
+    		
+    		contents = getFileContents("queries/get_sunday_routes.txt");
+	   		queryStatement = String.format(contents, direction, depart_station, arrival_station);
+    		break;
+    		
+    	}
     	
     	return queryStatement;
     }
@@ -256,7 +452,7 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     	
     	return queryStatement;
     }
-     
+    
     /*
      * Create all tables
      */
@@ -577,98 +773,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 		db.execSQL("DROP TABLE IF EXISTS " + TABLE_CALTRAIN_SCHEDULES);
 		
 	}
-	
-    /*
-     * Getting single stop station info by station id
-     */
-    Stop getStopById(String _station_id) throws Exception {
-    	
-    	try {
-    		
-	        SQLiteDatabase db = this.getReadableDatabase();
-	 
-	        Cursor cursor = db.query(TABLE_STOPS, new String[] { 
-	        		STOPS_ID,
-	                STOPS_CODE,
-	                STOPS_NAME,
-	                STOPS_DESC,
-	                STOPS_LAT,
-	                STOPS_LON,
-	                STOPS_ZONE_ID,
-	                STOPS_URL,
-	                STOPS_LOC_TYPE,
-	                STOPS_PARENT_STATION,
-	                STOPS_PLATFORM_CODE
-	                }, STOPS_ID + "=?",
-	                new String[] { String.valueOf(_station_id) }, null, null, null, null);
-	        
-	        if (cursor != null)
-	            cursor.moveToFirst();
-	 
-	        Stop stop = new Stop(cursor.getString(0),
-	                			 cursor.getString(1), 
-	                			 cursor.getString(2),
-	                			 cursor.getString(3),
-	                			 Double.parseDouble(cursor.getString(4)),
-	                			 Double.parseDouble(cursor.getString(5)),
-	                			 cursor.getString(6),
-	                			 cursor.getString(7),
-	                			 cursor.getString(8),
-	                			 cursor.getString(9),
-	                			 cursor.getString(10));
-	        	return stop;
-	        	
-    	} catch (Exception e) {
-    		throw e;
-    	}
-    }
     
-    /*
-     * Get single stop station info by station name
-     */
-    Stop getStopByName(String _station_name) throws Exception {
-    	
-    	try {
-	        SQLiteDatabase db = this.getReadableDatabase();
-	 
-	        Cursor cursor = db.query(TABLE_STOPS, new String[] { 
-	        		STOPS_ID,
-	                STOPS_CODE,
-	                STOPS_NAME,
-	                STOPS_DESC,
-	                STOPS_LAT,
-	                STOPS_LON,
-	                STOPS_ZONE_ID,
-	                STOPS_URL,
-	                STOPS_LOC_TYPE,
-	                STOPS_PARENT_STATION,
-	                STOPS_PLATFORM_CODE
-	                }, STOPS_NAME + "=?",
-	                new String[] { String.valueOf(_station_name) }, null, null, null, null);
-	        
-	        if (cursor != null)
-	            cursor.moveToFirst();
-	 
-	        Stop stop = new Stop(cursor.getString(0),
-	                			 cursor.getString(1), 
-	                			 cursor.getString(2),
-	                			 cursor.getString(3),
-	                			 Double.parseDouble(cursor.getString(4)),
-	                			 Double.parseDouble(cursor.getString(5)),
-	                			 cursor.getString(6),
-	                			 cursor.getString(7),
-	                			 cursor.getString(8),
-	                			 cursor.getString(9),
-	                			 cursor.getString(10));
-	
-	        return stop;
-	        
-    	} catch(Exception e) {
-    		throw e;
-    	}
-    }
-    
-    /*
+	/*
      * Get all station names
      */
     public List<String> getAllStopNames() throws Exception {
@@ -721,91 +827,6 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     }
     
     /*
-     * Get all station stops info
-     */
-    public List<Stop> getAllStops() throws Exception {
-        
-    	if ( !isTableExists(TABLE_STOPS) ) {
-    		
-    		SQLiteDatabase db = getWritableDatabase();
-    		
-    		createStopsTable(db);
-    		
-    		populateDataToStopsTable();
-    	
-    	}
-
-    	if (m_stopList.isEmpty()) {
-    		
-	    	m_stopList.clear();
-	    	
-	        String selectQuery = "SELECT "
-	        		+ STOPS_ID
-	        		+ ", "
-	        		+ STOPS_CODE
-	        		+ ", "
-	        		+ STOPS_NAME
-	        		+ ", "
-	        		+ STOPS_DESC
-	        		+ ", "
-	        		+ STOPS_LAT
-	        		+ ", "
-	        		+ STOPS_LON
-	        		+ ", "
-	        		+ STOPS_ZONE_ID
-	        		+ ", "
-	        		+ STOPS_URL
-	        		+ ", "
-	        		+ STOPS_LOC_TYPE
-	        		+ ", "
-	        		+ STOPS_PARENT_STATION
-	        		+ ", "
-	        		+ STOPS_PLATFORM_CODE
-	        		+ " FROM " + TABLE_STOPS
-	        		+ " WHERE " + STOPS_CODE + " <> '' "
-        					+ "	AND " + STOPS_ZONE_ID + " <> '' "
-        					+ " AND " + STOPS_PLATFORM_CODE + " = 'NB' "
-        					+ " ORDER BY " + STOPS_LAT + " DESC";
-	 
-	        try {
-		        SQLiteDatabase db = this.getReadableDatabase();
-		        Cursor cursor = db.rawQuery(selectQuery, null);
-		        
-		        // looping through all rows and adding to list
-		        if (cursor.moveToFirst()) {
-		            do {
-		            	
-		                Stop stop = new Stop();
-		                stop.setStopId(cursor.getString(0));
-		                stop.setStopCode(cursor.getString(1));
-		                stop.setStopName(cursor.getString(2));
-		                stop.setStopDesc(cursor.getString(3));
-		                stop.setStopLat(Double.parseDouble(cursor.getString(4)));
-		                stop.setStopLon(Double.parseDouble(cursor.getString(5)));
-		                stop.setStopZoneId(cursor.getString(6));
-		                stop.setStopUrl(cursor.getString(7));
-		                stop.setStopLocationType(cursor.getString(8));
-		                stop.setStopParentStation(cursor.getString(9));
-		                stop.setStopPlatformCode(cursor.getString(10));
-		                
-		                // Adding contact to list
-		                m_stopList.add(stop);
-		                
-		            } while (cursor.moveToNext());
-		        }
-	        
-		        return m_stopList;
-		        
-	        } catch(Exception e) {
-	        	throw e;
-	        }
-	        
-    	}
-    	
-    	return m_stopList;
-    }
-    
-    /*
      * Get contents of input file name 
      */
     private String getFileContents(String fileName) {
@@ -825,35 +846,6 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     	} catch(IOException ioe) {
     		return "";
     	}
-    }
-    
-    /*
-     * Get the station details based on the current source and destination stations, 
-     * and wherether it is southbound or northbound
-     */
-    public ArrayList<String> getStationDetails(String source_station_name, String destination_station_name, String direction) throws Exception {
-    
-    	ArrayList<String> detailList = new ArrayList<String>();
-    	
-    	String selectQuery = BuildGetDetailQueryStatement(source_station_name, destination_station_name, direction);
-    	
-		try {
-			SQLiteDatabase db = this.getReadableDatabase();
-			Cursor cursor = db.rawQuery(selectQuery, null);
-			
-			if ( cursor.moveToFirst() ) {
-				
-			    do { 
-			    	detailList.add(cursor.getString(0));
-			    	
-			    } while ( cursor.moveToNext() );
-			}
-			
-		} catch(Exception e) {
-			throw e;
-		}
-
-    	return detailList;
     }
     
     /*
@@ -878,6 +870,74 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     	}
     }
  
+    /*
+     * Obtain the transfer station detail
+     */
+    public TransferDetail getTransferDetail(String depart_time, String depart_route_id, String arrival_time, String destination_route_id, String direction) throws Exception {
+    
+    	TransferDetail new_transfer = null;
+    	
+    	String selectQuery = BuildGetTransferDetailQueryStatement(depart_time, depart_route_id, arrival_time, destination_route_id, direction);
+    	
+		try {
+			SQLiteDatabase db = this.getReadableDatabase();
+			Cursor cursor = db.rawQuery(selectQuery, null);
+			
+			if ( cursor.moveToFirst() ) {
+				
+				new_transfer = new TransferDetail(TrimWhiteSpacesOrDoubleQuotes(cursor.getString(0)), 
+						cursor.getString(1).trim(), 
+						cursor.getString(2).trim(),
+						cursor.getString(3).trim(),
+						cursor.getString(4).trim());
+			    
+			}
+			
+		} catch(Exception e) {
+			throw e;
+		}
+
+    	return new_transfer;
+    }
+    
+    /*
+     * Insert route detail into caltrain schedule table
+     */
+    private void InsertScheduleIntoTable(RouteDetail routeDetail) throws Exception {
+
+    	if ( !isTableExists(TABLE_CALTRAIN_SCHEDULES)) throw new Exception("Caltrain schedule table does not exist");
+        
+    	String line = "";
+    	
+    	try {
+    		
+		    ContentValues values = new ContentValues();  
+			
+		    values.put(CALTRAIN_SCHEDULE_ROUTE_NUMBER, routeDetail.getRouteNumber());  
+		    values.put(CALTRAIN_SCHEDULE_ROUTE_DIRECTION, routeDetail.getRouteDirection());  
+		    values.put(CALTRAIN_SCHEDULE_DEPART_STOP_NAME, routeDetail.getDepartStationName());  
+		    values.put(CALTRAIN_SCHEDULE_ARRIVAL_STOP_NAME, routeDetail.getArrivalStationName());  
+		    values.put(CALTRAIN_SCHEDULE_DEPART_TIME, routeDetail.getRouteDepart());  
+		    values.put(CALTRAIN_SCHEDULE_ARRIVAL_TIME, routeDetail.getRouteArrive());  
+		    values.put(CALTRAIN_SCHEDULE_ROUTE_TYPE, routeDetail.getRouteName());  
+		    values.put(CALTRAIN_SCHEDULE_SERVICE_ID, routeDetail.getRouteServiceId());  
+		    values.put(CALTRAIN_SCHEDULE_START_DATE, routeDetail.getRouteStartDate());  
+		    values.put(CALTRAIN_SCHEDULE_END_DATE, routeDetail.getRouteEndDate());  
+		    
+		    if (routeDetail.getRouteTransfer() != null) {
+		    	values.put(CALTRAIN_SCHEDULE_TRANSFER_STOP_NAME, routeDetail.getRouteTransfer().getStopName());  
+			    values.put(CALTRAIN_SCHEDULE_TRANSFER_ROUTE_NUMBER, routeDetail.getRouteTransfer().getArrivalRouteNumber());  
+			    values.put(CALTRAIN_SCHEDULE_TRANSFER_DEPART_TIME, routeDetail.getRouteTransfer().getDepartTime());  
+			    values.put(CALTRAIN_SCHEDULE_TRANSFER_ARRIVAL_TIME, routeDetail.getRouteTransfer().getArrivalTime());  
+		    }
+		    
+		    this.getWritableDatabase().insert(TABLE_CALTRAIN_SCHEDULES, null, values); 
+			
+    	} catch	(Exception e) {
+			throw e;
+		}		
+    }
+    
     /*
      * Check if table exists
      */

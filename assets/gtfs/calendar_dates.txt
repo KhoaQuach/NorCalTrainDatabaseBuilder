@@ -1,0 +1,14 @@
+service_id,date,exception_type
+CT-12OCT-Caltrain-Sunday-02,20140526,1
+CT-12OCT-Caltrain-Sunday-02,20140704,1
+CT-12OCT-Caltrain-Sunday-02,20140901,1
+CT-12OCT-Caltrain-Sunday-02,20141127,1
+CT-12OCT-Caltrain-Sunday-02,20141225,1
+CT-12OCT-Caltrain-Sunday-02,20150101,1
+CT-12OCT-Combo-Weekday-01,20140526,2
+CT-12OCT-Combo-Weekday-01,20140704,2
+CT-12OCT-Combo-Weekday-01,20140901,2
+CT-12OCT-Combo-Weekday-01,20141127,2
+CT-12OCT-Combo-Weekday-01,20141225,2
+CT-12OCT-Combo-Weekday-01,20150101,2
+CT-12OCT-Combo-Weekday-01,20150216,2

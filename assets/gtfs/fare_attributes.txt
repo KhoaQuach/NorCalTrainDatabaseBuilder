@@ -1,0 +1,7 @@
+fare_id,price,currency_type,payment_method,transfers,transfer_duration
+"OW_1_20130616",3.0000,"USD",1,0,
+"OW_2_20130616",5.0000,"USD",1,0,
+"OW_3_20130616",7.0000,"USD",1,0,
+"OW_4_20130616",9.0000,"USD",1,0,
+"OW_5_20130616",11.0000,"USD",1,0,
+"OW_6_20130616",13.0000,"USD",1,0,

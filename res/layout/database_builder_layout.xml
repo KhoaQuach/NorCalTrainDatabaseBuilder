@@ -15,23 +15,27 @@
         android:layout_alignParentTop="true"
         android:text="@string/button_build_database" />
     
-    <TextView
-        android:id="@+id/text_view_status"
-        android:layout_width="wrap_content"
-        android:layout_height="127dp"
-        android:layout_alignParentBottom="true"
-        android:layout_alignParentLeft="true"
-        android:layout_alignParentRight="true"
-        android:layout_below="@+id/progress_bar"
-        android:text="" />
-
     <ProgressBar
         android:id="@+id/progress_bar"
         style="?android:attr/progressBarStyleLarge"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_below="@+id/button_staring_build"
+        android:layout_below="@+id/button_start_build"
         android:layout_centerHorizontal="true" />
+    
+    <ScrollView
+    android:id="@+id/scroll_view"
+    android:layout_below="@+id/progress_bar"
+    android:layout_width="fill_parent"
+    android:layout_height="wrap_content"
+    android:scrollbars="vertical"
+    android:fillViewport="true">
+	    <TextView
+	        android:id="@+id/text_view_status"
+	        android:layout_width="fill_parent"
+	        android:layout_height="wrap_content"
+	        android:text="" />
+    </ScrollView>
 
 </RelativeLayout>
 

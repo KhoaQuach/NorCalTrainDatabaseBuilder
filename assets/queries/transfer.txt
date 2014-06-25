@@ -1,0 +1,28 @@
+select
+    s_a.stop_name, t_a.trip_short_name, st_a.arrival_time, t_d.trip_short_name, st_d.arrival_time
+
+from
+    trips as t_a
+    
+join
+    stop_times as st_a on st_a.trip_id = t_a.trip_id and "%s" <= st_a.arrival_time and st_a.arrival_time <= "%s"
+
+join
+    stops as s_a on s_a.stop_id = st_a.stop_id and s_a.zone_id > 0 and s_a.platform_code = "%s"
+
+left join 
+    trips as t_d on t_d.trip_short_name = %s
+ 
+left join 
+    stop_times as st_d on  st_d.trip_id = t_d.trip_id and "%s" <= st_d.arrival_time and st_d.arrival_time <= "%s"
+ 
+left join
+    stops as s_d on s_d.stop_id = st_d.stop_id and s_d.zone_id > 0 and s_d.platform_code = "%s"
+    
+where
+    t_a.trip_short_name = "%s"
+    and s_a.stop_name = s_d.stop_name
+    and st_a.arrival_time < st_d.arrival_time
+
+
+order by st_d.arrival_time %s
