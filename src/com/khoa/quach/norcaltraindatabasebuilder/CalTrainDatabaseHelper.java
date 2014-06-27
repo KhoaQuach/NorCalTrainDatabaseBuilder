@@ -971,9 +971,9 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     	//
     	// Aggregate data for all routes
     	//
-    	//AggregateCaltrainSchedules(ScheduleEnum.WEEKDAY);
-    	//AggregateCaltrainSchedules(ScheduleEnum.SATURDAY);
-    	//AggregateCaltrainSchedules(ScheduleEnum.SUNDAY);
+    	AggregateCaltrainSchedules(ScheduledEnum.WEEKDAY);
+    	AggregateCaltrainSchedules(ScheduledEnum.SATURDAY);
+    	AggregateCaltrainSchedules(ScheduledEnum.SUNDAY);
     }
     
     /*

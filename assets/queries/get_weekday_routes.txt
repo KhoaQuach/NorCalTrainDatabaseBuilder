@@ -1,0 +1,10 @@
+select s.stop_name, t.trip_short_name, st.arrival_time, r.route_long_name, c.start_date, c.end_date, c.service_id
+from calendar c
+join trips as  t on t.service_id = c.service_id
+join routes as r on r.route_id = t.route_id
+join stop_times st on st.trip_id = t.trip_id
+join stops s on s.stop_id = st.stop_id and s.platform_code = "%s" and zone_id > 0
+where
+    (c.monday = 1 and c.tuesday = 1 and c.wednesday = 1 and c.thursday = 1 and c.friday = 1)
+    and (s.stop_name like "%s%%" or s.stop_name like "%s%%")
+order by st.arrival_time
