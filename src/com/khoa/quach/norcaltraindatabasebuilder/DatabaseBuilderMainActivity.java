@@ -3,6 +3,7 @@ package com.khoa.quach.norcaltraindatabasebuilder;
 import android.app.Activity;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -11,7 +12,7 @@ import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-public class DatabaseBuilderMainActivity extends Activity {
+public class DatabaseBuilderMainActivity extends Activity implements Handler.Callback {
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -66,28 +67,20 @@ public class DatabaseBuilderMainActivity extends Activity {
 		build_progress.setVisibility(View.VISIBLE);
 		start_build.setEnabled(false);
 		
-		final Handler handler = new Handler();
+		final Handler handler = new Handler(this);
+		
 	    Runnable runnable = new Runnable() {
 	       
 	        public void run() {
-	    
+	   
+                handler.post(new Runnable(){
+                    public void run() {
+                       status_text.append("Staring building the database...\n");
+                    }
+                });
+            
 	        	// Do work here
-	    		m_caltrainDb.SetupDatabaseTables();
-	    		
-	    		// Testing to update text view status
-	            for (int i = 0; i < 5; i++) {  
-	                try {
-	                    Thread.sleep(1000);
-	                }    
-	                catch (InterruptedException e) {
-	                    e.printStackTrace();
-	                }
-	                handler.post(new Runnable(){
-	                    public void run() {
-	                       status_text.append("Finishing count down..." + System.currentTimeMillis() + "\n");
-	                    }
-	                });
-	            }
+	    		m_caltrainDb.SetupDatabaseTables(handler);
 	            
 	            handler.post(new Runnable(){
                     public void run() {
@@ -101,10 +94,18 @@ public class DatabaseBuilderMainActivity extends Activity {
 	        }
 	    };
 	    new Thread(runnable).start();
-	    
-	    
-	    
 		
+	}
+
+	@Override
+	public boolean handleMessage(Message msg) {
+		
+		final TextView status_text = (TextView)findViewById(R.id.text_view_status);
+		Bundle bundle = msg.getData();
+        String text = bundle.getString("status");
+		status_text.append(text + "\n");
+		
+		return false;
 		
 	}
 

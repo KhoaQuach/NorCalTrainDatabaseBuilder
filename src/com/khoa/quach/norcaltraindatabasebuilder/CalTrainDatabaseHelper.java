@@ -10,6 +10,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import android.app.Activity;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.res.AssetManager;
@@ -17,10 +18,16 @@ import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.widget.TextView;
  
 public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 
 	private static Context myContext;
+	private static Handler uiHandler;
+	
 	List<String> m_stopNameList = new ArrayList<String>();
 	List<Stop> m_stopList = new ArrayList<Stop>();
 	
@@ -226,14 +233,17 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     /*
      * Aggregate individual trip to caltrain_schedules table
      */
-    private void AggregateCaltrainSchedule(String depart_station, String arrival_station, String direction, ScheduledEnum selectedSchedule) throws Exception {
+    private void AggregateCaltrainSchedule(String depart_station, String arrival_station, String direction, ScheduledEnum selectedSchedule, boolean ignore_transfer) throws Exception {
     	
     	String route_number = "", route_name = "";
+    	
+    	UpdateStatus("AggregateCaltrainSchedule() is starting...");
+    	UpdateStatus("depart="+depart_station+"; arrival="+arrival_station+"; direction="+direction+"; scheduled enum="+selectedSchedule.toString());
     	
     	// Data is temporarily held here
 		Map<String, RouteDetail> routeTempDetail = new LinkedHashMap<String, RouteDetail>();
 		RouteDetail newRouteDetail;
-    	
+		
     	String selectQuery = BuildGetCaltrainScheduleQueryStatement(depart_station, arrival_station, direction, selectedSchedule);
     	
 		try {
@@ -251,6 +261,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 			    	if (depart_station.compareTo(cursor.getString(0).trim()) == 0) {
 			    		
 			    		newRouteDetail = new RouteDetail();
+			    		
+			    		newRouteDetail.setRouteDirection(direction);
 			    		
 			    		//
 			    		// The row data belong to source station, save them into a hashable list
@@ -288,10 +300,12 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 			    			newRouteDetail.setNeedTransfer(false);
 			    		}
 			    		else {
-			    			if (newRouteDetail == null) {
+			    			if (newRouteDetail == null && ignore_transfer == false) {
 			    				
 			    				newRouteDetail = new RouteDetail();
 					    		
+			    				newRouteDetail.setRouteDirection(direction);
+			    				
 					    		//
 					    		// The row data belong to destination station, save them into a hashable list
 					    		//
@@ -324,6 +338,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 			    	
 			        RouteDetail routeDetail = entry.getValue();
 			        if (routeDetail.getNeedTransfer()) {
+			        
+			        	UpdateStatus("Need transfer...");
 			        	
 			        	List<String> keyList = new ArrayList<String>(routeTempDetail.keySet());
 			        	
@@ -391,15 +407,33 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 			List<String> station_names = getAllStopNames();
 			
 			for (int i = 0; i < station_names.size(); i++) {
-				for (int j = 0; j < station_names.size(); j++) {
+				for (int j = i + 1; j < station_names.size(); j++) {
 					
-					if (j < i) direction = "SB";
-					else direction = "NB";
+					if (j < i) direction = "NB";
+					else direction = "SB";
 					
-					AggregateCaltrainSchedule(station_names.get(i), station_names.get(j), direction, scheduledDate);
-				
+					boolean ignore_transfer = Math.abs(j-i)<=1?true:false;
+					
+					if ( i != j ) {
+						AggregateCaltrainSchedule(station_names.get(i), station_names.get(j), direction, scheduledDate, ignore_transfer);
+					}
 				}
 			}
+			
+			for (int i = station_names.size()-1; 0 <= i; i--) {
+				for (int j = i; 0 <= j; j--) {
+					
+					if (j < i) direction = "NB";
+					else direction = "SB";
+					
+					boolean ignore_transfer = Math.abs(i-j)<=1?true:false;
+					
+					if ( i != j ) {
+						AggregateCaltrainSchedule(station_names.get(i), station_names.get(j), direction, scheduledDate, ignore_transfer);
+					}
+				}
+			}
+			
 		} catch (Exception e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -494,7 +528,7 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 	                + CALTRAIN_SCHEDULE_TRANSFER_STOP_NAME + " VARCHAR(255) NULL,"
 	        		+ CALTRAIN_SCHEDULE_TRANSFER_ROUTE_NUMBER + " VARCHAR(32) NULL,"
 	        		+ CALTRAIN_SCHEDULE_TRANSFER_DEPART_TIME + " VARCHAR(32) NULL,"
-	                + CALTRAIN_SCHEDULE_TRANSFER_ARRIVAL_TIME + " VARCHAR(32) NULL,"
+	                + CALTRAIN_SCHEDULE_TRANSFER_ARRIVAL_TIME + " VARCHAR(32) NULL"
 	        		+ ");"
 	        		+ "CREATE INDEX idx_depart_stop_name ON " + TABLE_CALTRAIN_SCHEDULES + "(" + CALTRAIN_SCHEDULE_DEPART_STOP_NAME + ");"
 	        		+ "CREATE INDEX idx_arrival_stop_name ON " + TABLE_CALTRAIN_SCHEDULES + "(" + CALTRAIN_SCHEDULE_ARRIVAL_STOP_NAME + ");"
@@ -907,6 +941,15 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 
     	if ( !isTableExists(TABLE_CALTRAIN_SCHEDULES)) throw new Exception("Caltrain schedule table does not exist");
         
+    	if ( routeDetail == null || routeDetail.getRouteDirection().isEmpty() ) return;
+
+    	UpdateStatus("InsertScheduleInfoTable() staring...");
+    	UpdateStatus("route number="+routeDetail.getRouteNumber()+"; route direction="+routeDetail.getRouteDirection());
+    	UpdateStatus("depart="+routeDetail.getDepartStationName()+"; arrival="+routeDetail.getArrivalStationName());
+    	UpdateStatus("depart time="+routeDetail.getRouteDepart()+"; arrival time="+routeDetail.getRouteArrive());
+    	UpdateStatus("route name="+routeDetail.getRouteName()+"; service id="+routeDetail.getRouteServiceId());
+    	UpdateStatus("start date="+routeDetail.getRouteStartDate()+"; end date="+routeDetail.getRouteEndDate());
+    	
     	String line = "";
     	
     	try {
@@ -925,6 +968,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
 		    values.put(CALTRAIN_SCHEDULE_END_DATE, routeDetail.getRouteEndDate());  
 		    
 		    if (routeDetail.getRouteTransfer() != null) {
+		    	UpdateStatus("transfer stop name="+routeDetail.getRouteTransfer().getStopName()+"; transfer arrival route number="+routeDetail.getRouteTransfer().getArrivalRouteNumber());
+		    	UpdateStatus("transfer start time="+routeDetail.getRouteTransfer().getDepartTime()+"; transfer arrival time="+routeDetail.getRouteTransfer().getArrivalTime());
 		    	values.put(CALTRAIN_SCHEDULE_TRANSFER_STOP_NAME, routeDetail.getRouteTransfer().getStopName());  
 			    values.put(CALTRAIN_SCHEDULE_TRANSFER_ROUTE_NUMBER, routeDetail.getRouteTransfer().getArrivalRouteNumber());  
 			    values.put(CALTRAIN_SCHEDULE_TRANSFER_DEPART_TIME, routeDetail.getRouteTransfer().getDepartTime());  
@@ -966,6 +1011,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      */
     private void populateDataToCaltrainSchedulesTables() throws Exception {
     	
+    	UpdateStatus("populateDataToCaltrainSchedulesTable() is starting...");
+    	
     	if ( 0 < getTableCount(TABLE_CALTRAIN_SCHEDULES) ) return;
     	
     	//
@@ -980,6 +1027,9 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Parse and insert data to all tables
      */
     private void populateAllDataToTables() throws Exception {
+    	
+    	UpdateStatus("PopulateAllDataToTables() is starting...");
+    	
     	try {
 			this.populateDataToAgencyTable();
 	    	this.populateDataToCalendarDatesTable();
@@ -1005,6 +1055,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to agency table from csv file 
      */
     public void populateDataToAgencyTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToAgencyTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_AGENCY) ) return;
         
@@ -1044,6 +1096,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      */
     public void populateDataToCalendarDatesTable() throws Exception {
     	
+    	UpdateStatus("populateDataToCalendarDatesTable() is starting...");
+    	
     	if ( 0 < getTableCount(TABLE_CALENDAR_DATES) ) return;
         
     	String line = "";
@@ -1078,6 +1132,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to calendar table from csv file 
      */
     public void populateDataToCalendarTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToCalendarTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_CALENDAR) ) return;
         
@@ -1122,6 +1178,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      */
     public void populateDataToFareAttributesTable() throws Exception {
     	
+    	UpdateStatus("populateDataToFareAttributesTable() is starting...");
+    	
     	if ( 0 < getTableCount(TABLE_FARE_ATTRIBUTES) ) return;
         
     	String line = "";
@@ -1162,6 +1220,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      */
     public void populateDataToFareRulesTable() throws Exception {
     	
+    	UpdateStatus("populateDataToFareRulesTable() is starting...");
+    	
     	if ( 0 < getTableCount(TABLE_FARE_RULES) ) return;
         
     	String line = "";
@@ -1198,6 +1258,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to calendar table from csv file 
      */
     public void populateDataToShapesTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToShapesTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_SHAPES) ) return;
         
@@ -1237,6 +1299,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to routes table from csv file 
      */
     public void populateDataToRoutesTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToRoutesTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_ROUTES) ) return;
         
@@ -1280,6 +1344,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to stops table from csv file 
      */
     public void populateDataToStopsTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToStopsTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_STOPS) ) return;
     	
@@ -1329,6 +1395,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      */
     public void populateDataToStopTimesTable() throws Exception {
     	
+    	UpdateStatus("populateDataToStopTimesTable() is starting...");
+    	
     	if ( 0 < getTableCount(TABLE_STOP_TIMES) ) return;
         
     	String line = "";
@@ -1368,6 +1436,8 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
      * Populate data to trips table from csv file 
      */
     public void populateDataToTripsTable() throws Exception {
+    	
+    	UpdateStatus("populateDataToTripsTable() is starting...");
     	
     	if ( 0 < getTableCount(TABLE_TRIPS) ) return;
     	    
@@ -1409,7 +1479,11 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     /*
      * Check if we need to populate data to tables on first run or on database upgrade
      */
-    public void SetupDatabaseTables() {
+    public void SetupDatabaseTables(Handler _uiHandler) {
+    	
+    	uiHandler = _uiHandler;
+    	
+    	UpdateStatus("SetupDatabaseTables() is starting...");
     	
     	try
     	{
@@ -1440,6 +1514,20 @@ public class CalTrainDatabaseHelper extends SQLiteOpenHelper {
     private String TrimWhiteSpacesOrDoubleQuotes(String str) {
     	return str.trim().replaceAll("^\"|\"$", "").trim();
     }
+    
+    private void UpdateStatus(String msg) {
+            	 
+    	 Message message = uiHandler.obtainMessage();
+
+         Bundle bundle = new Bundle();
+         bundle.putString("status", msg);
+
+         message.setData(bundle);
+
+         uiHandler.sendMessage(message);
+         
+    }
+    
 }
 
 
